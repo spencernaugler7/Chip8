@@ -16,15 +16,24 @@
 // Y: The third nibble. Also used to look up one of the 16 registers (VY) from V0 through VF.
 // N: The fourth nibble. A 4-bit number.
 
+using System.Buffers.Binary;
+using System.Drawing;
+using System.Runtime.InteropServices.JavaScript;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
+using Silk.NET.OpenGL;
+using Window = Silk.NET.Windowing.Window;
 
 namespace Chip8;
 
 public class Chip8
 {
-    private const int ProgramLoadOffset = 0x200; // this is the start of user data everything before this address is font data
-    private static readonly int[,] Fonts = new int[16,5]
+    private static GL _gl;
+    private const int ProgramLoadOffset = 0x200; // start of user data everything before this address is font data
+    private const double Chip8InstructionFrequency = 1 / 700D;
+    private double _emuTimingCounter = 0; // used to match the run cycle of every time this hits 14 ms parse a new instruction
+    
+    private static readonly byte[,] Fonts = new byte[16,5]
     {
         { 0xF0, 0x90, 0x90, 0x90, 0xF0 }, // 0
         { 0x20, 0x60, 0x20, 0x20, 0x70 }, // 1
@@ -44,53 +53,128 @@ public class Chip8
         { 0xF0, 0x80, 0xF0, 0x80, 0x80 }  // F
     };
     
-    private IWindow _window;
-    private byte[] _memory = new byte[4096];
-    private UInt16 PC = UInt16.MinValue;
-    private UInt16 IRegister = UInt16.MinValue;
-    private Stack<UInt16> _addressStack = new();
+    private readonly IWindow _window;
+    private readonly byte[] _memory = new byte[4096];
+    private int _pc = ProgramLoadOffset;
+    private ushort _iRegister = 0;
+    private Stack<short> _addressStack = new();
     private byte DelayTimer = Byte.MinValue;
     private byte SoundTimer = Byte.MinValue;
     // how the fuck are the timers represented
     
     // chip 8 variable registers
-    private byte V0 = byte.MinValue;
-    private byte V1 = byte.MinValue;
-    private byte V2 = byte.MinValue;
-    private byte V3 = byte.MinValue;
-    private byte V4 = byte.MinValue;
-    private byte V5 = byte.MinValue;
-    private byte V7 = byte.MinValue;
-    private byte V8 = byte.MinValue;
-    private byte V9 = byte.MinValue;
-    private byte VA = byte.MinValue;
-    private byte VB = byte.MinValue;
-    private byte VC = byte.MinValue;
-    private byte VD = byte.MinValue;
-    private byte VE = byte.MinValue;
-    private byte VF = byte.MinValue;
-
-    private void OnLoad()
+    private Dictionary<ushort, byte> _chip8RegisterDict = new()
     {
-        
-    }
+        {0, byte.MinValue},
+        {1, byte.MinValue},
+        {2, byte.MinValue},
+        {3, byte.MinValue},
+        {4, byte.MinValue},
+        {5, byte.MinValue},
+        {6, byte.MinValue},
+        {7, byte.MinValue},
+        {8, byte.MinValue},
+        {9, byte.MinValue},
+        {10, byte.MinValue},
+        {0xA, byte.MinValue},
+        {0xB, byte.MinValue},
+        {0xC, byte.MinValue},
+        {0xD, byte.MinValue},
+        {0xE, byte.MinValue},
+        {0xF, byte.MinValue},
+    };
 
     private void OnRender(double deltaTime)
     {
-        
+        _emuTimingCounter += deltaTime;
+        if (_emuTimingCounter >= Chip8InstructionFrequency)
+        {
+            Chip8MainLoop();
+            _emuTimingCounter = 0;
+        }
     }
 
-    private void OnUpdate(double deltaTime)
+    /// <summary>
+    /// Main emulation loop for chip 8
+    /// steps: Fetch, decode, execute
+    /// </summary>
+    private void Chip8MainLoop()
     {
-        
+        ushort currentChip8Instruction = BinaryPrimitives.ReadUInt16BigEndian(new[]{_memory[_pc] , _memory[_pc + 1]});
+        int opcode = ExtractFromShort(currentChip8Instruction, 0, 4); // opcode is in the first nibble (half-byte)
+        switch (opcode)
+        {
+            case 0x0: // chip 8 clear instruction
+                _gl.ClearColor(Color.Black);
+                break;
+            case 0x1: // chip 8 jump instruction, jump destination is all the data after the opcode (12 bits long)
+                int dest = ExtractFromShort(currentChip8Instruction, 4, 12); //  
+                _pc = dest;
+                break;
+            case 0x6: // set one of chip8's 15 built-in registers to 'newValue' 
+                ushort destinationRegister = ExtractFromShort(currentChip8Instruction, 4, 4);
+                ushort newValue = ExtractFromShort(currentChip8Instruction, 8, 8);
+                _chip8RegisterDict[destinationRegister] = (byte)newValue;
+                break;
+            case 0x7: // add 'newValue' to one of chip8's registers
+                ushort registerToAddTo = ExtractFromShort(currentChip8Instruction, 4, 4);
+                ushort valueToAdd = ExtractFromShort(currentChip8Instruction, 8, 8);
+                _chip8RegisterDict[registerToAddTo] += BitConverter.GetBytes(valueToAdd).First();
+                break;
+            case 0xD: // display instruction
+                DisplayScreen();
+                break;
+        }
+
+        _pc += 2; // every chip 8 instruction is two bytes long, so we need to increment by two bytes
+    }
+
+    private void DisplayScreen()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Helper function to get a bit array value from a ushort
+    /// </summary>
+    /// <param name="source">source short to extract a value from</param>
+    /// <param name="start">start location of the bitvector to extract</param>
+    /// <param name="length">length of the bitvector to extract</param>
+    /// <returns>ushort representation of the extracted data</returns>
+    private ushort ExtractFromShort(ushort source, int start, int length)
+    {
+        ushort clone = source;
+        clone <<= start - 1;
+        clone >>= 16 - length;
+        return clone;
+    }
+
+    private void Onload()
+    {
+        _gl = _window.CreateOpenGL();
+        _gl.ClearColor(Color.Black);
     }
     
-    private Chip8(IWindow window)
+    private Chip8(IWindow window, byte[] instructions)
     {
         _window = window;
-        _window.Load += OnLoad;
         _window.Render += OnRender;
-        _window.Update += OnUpdate;
+        _window.Load += Onload;
+
+        //load up memory
+        foreach(byte fontByte in Fonts)
+        {
+            _memory.Append(fontByte);
+        }
+        foreach(byte instruction in instructions)
+        {
+            _memory.Append(instruction);
+        }
+    }
+    
+    public void Run()
+    {
+        _window.Run();
     }
     
     public class Builder
@@ -100,7 +184,8 @@ public class Chip8
         private int _scale = 8;
         private string _title = "Chip8 Emulator";
         private IWindow _window;
-        
+        private byte[] _instructions;
+
         public Builder WithScale(int scale) 
         {
             _scale = scale;
@@ -110,6 +195,12 @@ public class Chip8
         public Builder WithTitle(string title)
         {
             _title = title;
+            return this;
+        }
+        
+        public Builder WithInstructions(byte[] instructions)
+        {
+            _instructions = instructions;
             return this;
         }
 
@@ -122,13 +213,9 @@ public class Chip8
         
             _window = Window.Create(options);
 
-            return new Chip8(_window);
+            return new Chip8(_window, _instructions);
         }
-    }
 
-    public void Run()
-    {
-        _window.Run();
     }
 }
 
@@ -136,12 +223,13 @@ public static class Program
 {
     private static void Main(string[] args)
     {
-        var options = WindowOptions.Default;
-        options.Title = "Chip 8 Net!";
+        var chip8FilePath = Path.Join(Directory.GetParent(Environment.CurrentDirectory)?.Parent?.Parent?.FullName,"ibm_logo.ch8");
+        byte[] data = File.ReadAllBytes(chip8FilePath);
 
-        var chip8 = new Chip8.Builder()
+        Chip8 chip8 = new Chip8.Builder()
             .WithScale(8)
             .WithTitle("Hello World!")
+            .WithInstructions(data)
             .Build();
 
         chip8.Run();
