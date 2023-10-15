@@ -32,7 +32,13 @@ public class Chip8
     private const int ProgramLoadOffset = 0x200; // start of user data everything before this address is font data
     private const double Chip8InstructionFrequency = 1 / 700D;
     private double _emuTimingCounter = 0; // used to match the run cycle of every time this hits 14 ms parse a new instruction
-    
+    private readonly IWindow window;
+    private readonly byte[] memory = new byte[4096];
+    private int pc = ProgramLoadOffset;
+    private ushort iRegister = 0;
+    private Stack<short> addressStack = new();
+    private byte delayTimer = Byte.MinValue;
+    private byte soundTimer = Byte.MinValue;
     private static readonly byte[,] Fonts = new byte[16,5]
     {
         { 0xF0, 0x90, 0x90, 0x90, 0xF0 }, // 0
@@ -53,13 +59,6 @@ public class Chip8
         { 0xF0, 0x80, 0xF0, 0x80, 0x80 }  // F
     };
     
-    private readonly IWindow window;
-    private readonly byte[] memory = new byte[4096];
-    private int pc = ProgramLoadOffset;
-    private ushort iRegister = 0;
-    private Stack<short> addressStack = new();
-    private byte delayTimer = Byte.MinValue;
-    private byte soundTimer = Byte.MinValue;
     // how the fuck are the timers represented
     
     // chip 8 variable registers
