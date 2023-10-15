@@ -29,8 +29,6 @@ public class LearningTests
         string chip8FilePath = Path.Join(Directory.GetParent(Environment.CurrentDirectory)?.Parent?.Parent?.FullName, fileName);
         byte[] chip8Data = File.ReadAllBytes(chip8FilePath);
         ushort instruction = BinaryPrimitives.ReadUInt16BigEndian(new[] { chip8Data[startPosition], chip8Data[endPosition] }); // each instruction is a ushort which is two bytes
-        TestContext.WriteLine($"Instruction: {instruction:x}");
-        TestContext.WriteLine($"Expected value: {expectedResult:x}");
         Assert.That(instruction, Is.EqualTo(expectedResult));
     }
 }
