@@ -6,17 +6,10 @@ namespace Chip8Test;
 [TestFixture]
 public class LearningTests
 {
+    
     [SetUp]
     public void Setup()
     {
-        TestContext.AddFormatter(val =>
-        {
-            if (val is int)
-            {
-                int newVal = (int)val;
-                return _ => string.Format($"{newVal:x}");
-            } 
-        }); // want to print test failure numbers as hex values
     }
 
     [Test]
@@ -36,6 +29,8 @@ public class LearningTests
         string chip8FilePath = Path.Join(Directory.GetParent(Environment.CurrentDirectory)?.Parent?.Parent?.FullName, fileName);
         byte[] chip8Data = File.ReadAllBytes(chip8FilePath);
         ushort instruction = BinaryPrimitives.ReadUInt16BigEndian(new[] { chip8Data[startPosition], chip8Data[endPosition] }); // each instruction is a ushort which is two bytes
+        TestContext.WriteLine($"Instruction: {instruction:x}");
+        TestContext.WriteLine($"Expected value: {expectedResult:x}");
         Assert.That(instruction, Is.EqualTo(expectedResult));
     }
 }

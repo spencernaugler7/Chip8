@@ -17,10 +17,4 @@
         <PackageReference Include="coverlet.collector" Version="3.2.0"/>
     </ItemGroup>
 
-    <ItemGroup>
-      <Content Include="..\Chip8\ibm_logo.ch8">
-        <Link>ibm_logo.ch8</Link>
-      </Content>
-    </ItemGroup>
-
 </Project>
