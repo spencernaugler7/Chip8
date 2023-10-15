@@ -53,13 +53,13 @@ public class Chip8
         { 0xF0, 0x80, 0xF0, 0x80, 0x80 }  // F
     };
     
-    private readonly IWindow _window;
-    private readonly byte[] _memory = new byte[4096];
-    private int _pc = ProgramLoadOffset;
-    private ushort _iRegister = 0;
-    private Stack<short> _addressStack = new();
-    private byte DelayTimer = Byte.MinValue;
-    private byte SoundTimer = Byte.MinValue;
+    private readonly IWindow window;
+    private readonly byte[] memory = new byte[4096];
+    private int pc = ProgramLoadOffset;
+    private ushort iRegister = 0;
+    private Stack<short> addressStack = new();
+    private byte delayTimer = Byte.MinValue;
+    private byte soundTimer = Byte.MinValue;
     // how the fuck are the timers represented
     
     // chip 8 variable registers
@@ -100,7 +100,7 @@ public class Chip8
     /// </summary>
     private void Chip8MainLoop()
     {
-        ushort currentChip8Instruction = BinaryPrimitives.ReadUInt16BigEndian(new[]{_memory[_pc] , _memory[_pc + 1]});
+        ushort currentChip8Instruction = BinaryPrimitives.ReadUInt16BigEndian(new[]{memory[pc] , memory[pc + 1]});
         int opcode = ExtractFromShort(currentChip8Instruction, 0, 4); // opcode is in the first nibble (half-byte)
         switch (opcode)
         {
@@ -109,7 +109,7 @@ public class Chip8
                 break;
             case 0x1: // chip 8 jump instruction, jump destination is all the data after the opcode (12 bits long)
                 int dest = ExtractFromShort(currentChip8Instruction, 4, 12); //  
-                _pc = dest;
+                pc = dest;
                 break;
             case 0x6: // set one of chip8's 15 built-in registers to 'newValue' 
                 ushort destinationRegister = ExtractFromShort(currentChip8Instruction, 4, 4);
@@ -122,14 +122,17 @@ public class Chip8
                 _chip8RegisterDict[registerToAddTo] += BitConverter.GetBytes(valueToAdd).First();
                 break;
             case 0xD: // display instruction
-                DisplayScreen();
+                int xRegister = ExtractFromShort(currentChip8Instruction, 4, 4);
+                int yRegister = ExtractFromShort(currentChip8Instruction, 8, 4);
+                int height = ExtractFromShort(currentChip8Instruction, 12, 4);
+                DisplayScreen(xRegister, yRegister, height);
                 break;
         }
 
-        _pc += 2; // every chip 8 instruction is two bytes long, so we need to increment by two bytes
+        pc += 2; // every chip 8 instruction is two bytes long, so we need to increment by two bytes
     }
 
-    private void DisplayScreen()
+    private void DisplayScreen(int xRegister, int yRegister, int height)
     {
         throw new NotImplementedException();
     }
@@ -151,30 +154,30 @@ public class Chip8
 
     private void Onload()
     {
-        _gl = _window.CreateOpenGL();
+        _gl = window.CreateOpenGL();
         _gl.ClearColor(Color.Black);
     }
     
     private Chip8(IWindow window, byte[] instructions)
     {
-        _window = window;
-        _window.Render += OnRender;
-        _window.Load += Onload;
+        this.window = window;
+        this.window.Render += OnRender;
+        this.window.Load += Onload;
 
         //load up memory
         foreach(byte fontByte in Fonts)
         {
-            _memory.Append(fontByte);
+            memory.Append(fontByte);
         }
         foreach(byte instruction in instructions)
         {
-            _memory.Append(instruction);
+            memory.Append(instruction);
         }
     }
     
     public void Run()
     {
-        _window.Run();
+        window.Run();
     }
     
     public class Builder
